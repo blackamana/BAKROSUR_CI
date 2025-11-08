@@ -15,10 +15,10 @@ import { PROPERTIES, PropertyType } from '@/constants/properties';
 import { SearchFilters, TransactionType } from '@/lib/types/search.types';
 
 // Import des nouveaux composants inspirés de Bien'ici
-import PropertySearchBar from '@/components/search/PropertySearchBar';
-import TransactionTypeTabs from '@/components/search/TransactionTypeTabs';
-import MainFilters from '@/components/search/MainFilters';
-import ActiveFiltersBar from '@/components/search/ActiveFiltersBar';
+import { PropertySearchBar } from '@/components/search/PropertySearchBar';
+import { TransactionTypeTabs } from '@/components/search/TransactionTypeTabs';
+import { MainFilters } from '@/components/search/MainFilters';
+import { ActiveFiltersBar } from '@/components/search/ActiveFiltersBar';
 
 function formatPrice(price: number): string {
   if (price >= 1000000) {
