@@ -1,0 +1,164 @@
+/**
+ * Écran Liste des Conversations
+ */
+
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { Search, MessageCirclePlus } from 'lucide-react-native';
+import { ConversationList } from '@/components/chat/ConversationList';
+import { chatService, Conversation } from '@/lib/bakrosur-pay/chat.service';
+import { useAuth } from '@/hooks/useAuth';
+
+export default function ChatListScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const [totalUnread, setTotalUnread] = useState(0);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadUnreadCount();
+    }
+  }, [user]);
+
+  const loadUnreadCount = async () => {
+    try {
+      const count = await chatService.getTotalUnreadCount(user!.id);
+      setTotalUnread(count);
+    } catch (error) {
+      console.error('Erreur chargement non lus:', error);
+    }
+  };
+
+  const handleConversationPress = (conversation: Conversation) => {
+    router.push({
+      pathname: '/chat/[conversationId]',
+      params: {
+        conversationId: conversation.id,
+        otherUserId: conversation.other_user?.id || '',
+        otherUserName: conversation.other_user?.name || 'Utilisateur',
+        otherUserAvatar: conversation.other_user?.avatar || '',
+        propertyId: conversation.property_id || '',
+        propertyTitle: conversation.property?.title || '',
+      },
+    });
+  };
+
+  if (!user) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>
+          Connectez-vous pour accéder à vos messages
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerTitle}>Messages</Text>
+          {totalUnread > 0 && (
+            <Text style={styles.headerSubtitle}>
+              {totalUnread} nouveau{totalUnread > 1 ? 'x' : ''}
+            </Text>
+          )}
+        </View>
+
+        {/* Bouton recherche */}
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => router.push('/chat/search')}
+        >
+          <Search size={24} color="#000" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Liste des conversations */}
+      <ConversationList
+        userId={user.id}
+        onConversationPress={handleConversationPress}
+      />
+
+      {/* Bouton nouvelle conversation (optionnel) */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => router.push('/chat/new')}
+        activeOpacity={0.8}
+      >
+        <MessageCirclePlus size={24} color="white" />
+      </TouchableOpacity>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#EA580C',
+    marginTop: 2,
+  },
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    backgroundColor: '#F9FAFB',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#EA580C',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+});

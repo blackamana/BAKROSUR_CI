@@ -1,0 +1,377 @@
+import { useRouter } from 'expo-router';
+import { MapPin, X } from 'lucide-react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState, useEffect, useRef } from 'react';
+
+import Colors from '@/constants/colors';
+import { PROPERTIES } from '@/constants/properties';
+
+function formatPrice(price: number): string {
+  if (price >= 1000000) {
+    return `${(price / 1000000).toFixed(1)}M FCFA`;
+  }
+  if (price >= 1000) {
+    return `${(price / 1000).toFixed(0)}K FCFA`;
+  }
+  return `${price} FCFA`;
+}
+
+function WebMapView() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
+  const [isMapReady, setIsMapReady] = useState(false);
+  const mapInstanceRef = useRef<any>(null);
+  const markersRef = useRef<Map<string, any>>(new Map());
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    console.log('Starting map initialization...');
+    console.log('Properties count:', PROPERTIES.length);
+
+    // Charger CSS Leaflet
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    link.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';
+    link.crossOrigin = '';
+    document.head.appendChild(link);
+
+    // Charger JS Leaflet
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';
+    script.crossOrigin = '';
+    document.head.appendChild(script);
+
+    script.onload = () => {
+      console.log('Leaflet script loaded');
+      const L = (window as any).L;
+      
+      if (!L) {
+        console.error('Leaflet not available');
+        return;
+      }
+
+      // Attendre que le DOM soit pret
+      setTimeout(() => {
+        const container = document.getElementById('map-container');
+        
+        if (!container) {
+          console.error('Map container not found');
+          return;
+        }
+
+        console.log('Initializing Leaflet map...');
+
+        try {
+          // Creer la carte
+          const map = L.map('map-container').setView([5.3473, -3.9856], 12);
+          mapInstanceRef.current = map;
+
+          // Ajouter les tuiles
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19,
+          }).addTo(map);
+
+          console.log('Map created, adding markers...');
+
+          // Ajouter les marqueurs
+          PROPERTIES.forEach((property) => {
+            const getIcon = (type: string) => {
+              switch (type) {
+                case 'MAISON': return '🏠';
+                case 'APPARTEMENT': return '🏢';
+                case 'TERRAIN': return '🌳';
+                case 'COMMERCE': return '🏪';
+                case 'BUREAU': return '💼';
+                default: return '📍';
+              }
+            };
+
+            const customIcon = L.divIcon({
+              className: 'custom-marker',
+              html: `<div class="price-marker">${getIcon(property.type)} ${formatPrice(property.price).replace(' FCFA', '')}</div>`,
+              iconSize: [0, 0],
+              iconAnchor: [0, 0],
+            });
+
+            const marker = L.marker([property.latitude, property.longitude], {
+              icon: customIcon,
+            }).addTo(map);
+
+            const tooltipContent = `
+              <div style="padding: 0; min-width: 200px;">
+                <img src="${property.images[0]}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 8px 8px 0 0;" />
+                <div style="padding: 12px;">
+                  <h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700; color: ${Colors.light.text};">${property.title}</h3>
+                  <p style="margin: 0 0 4px 0; font-size: 16px; font-weight: 700; color: ${Colors.light.primary};">${formatPrice(property.price)}</p>
+                  <p style="margin: 0 0 4px 0; font-size: 12px; color: ${Colors.light.textSecondary};">${property.neighborhoodName}</p>
+                  <p style="margin: 0; font-size: 12px; color: ${Colors.light.textSecondary};">${property.surfaceArea}m²${property.bedrooms ? ` • ${property.bedrooms} ch.` : ''}</p>
+                </div>
+              </div>
+            `;
+
+            marker.bindTooltip(tooltipContent, {
+              permanent: false,
+              direction: 'top',
+              offset: [0, -10],
+              className: 'property-tooltip',
+            });
+
+            marker.on('click', () => {
+              markersRef.current.forEach((m, id) => {
+                const el = m.getElement();
+                if (el) {
+                  if (id === property.id) {
+                    el.classList.add('active');
+                  } else {
+                    el.classList.remove('active');
+                  }
+                }
+              });
+              setSelectedProperty(property.id);
+            });
+
+            markersRef.current.set(property.id, marker);
+          });
+
+          console.log('Map initialized with', PROPERTIES.length, 'markers');
+          setIsMapReady(true);
+
+        } catch (error) {
+          console.error('Error initializing map:', error);
+        }
+      }, 500); // Delai augmente pour assurer chargement
+    };
+
+    script.onerror = () => {
+      console.error('Failed to load Leaflet script');
+    };
+
+    // Ajouter les styles CSS
+    const style = document.createElement('style');
+    style.innerHTML = `
+      #map-container {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        background-color: #f0f0f0;
+      }
+      .leaflet-tooltip.property-tooltip {
+        background: white;
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        padding: 0;
+        max-width: 250px;
+      }
+      .leaflet-tooltip.property-tooltip::before {
+        display: none;
+      }
+      .custom-marker {
+        transition: all 0.2s ease;
+      }
+      .price-marker {
+        background: white;
+        border: 2px solid ${Colors.light.primary};
+        border-radius: 18px;
+        padding: 4px 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        font-weight: 700;
+        font-size: 10px;
+        color: #1a1a1a;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .price-marker:hover {
+        transform: scale(1.08);
+        background: ${Colors.light.primary};
+        color: white;
+        z-index: 1000 !important;
+      }
+      .custom-marker.active .price-marker {
+        background: ${Colors.light.primary};
+        color: white;
+        transform: scale(1.12);
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      console.log('Cleaning up map...');
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current.clear();
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectedProperty && mapInstanceRef.current && Platform.OS === 'web') {
+      const property = PROPERTIES.find(p => p.id === selectedProperty);
+      if (property) {
+        mapInstanceRef.current.setView([property.latitude, property.longitude], 15, {
+          animate: true,
+          duration: 0.5,
+        });
+        const marker = markersRef.current.get(selectedProperty);
+        if (marker) {
+          marker.openTooltip();
+        }
+      }
+    }
+  }, [selectedProperty]);
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.title}>Carte des biens</Text>
+            <Text style={styles.subtitle}>
+              {PROPERTIES.length} biens disponibles
+            </Text>
+          </View>
+          {selectedProperty && (
+            <Pressable 
+              style={styles.resetButton}
+              onPress={() => {
+                setSelectedProperty(null);
+                if (mapInstanceRef.current && Platform.OS === 'web') {
+                  mapInstanceRef.current.setView([5.3473, -3.9856], 12, {
+                    animate: true,
+                    duration: 0.5,
+                  });
+                }
+              }}
+            >
+              <X size={20} color={Colors.light.primary} />
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.mapContainer} nativeID="map-container">
+        {!isMapReady && (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Chargement de la carte...</Text>
+            <Text style={styles.loadingSubtext}>
+              {PROPERTIES.length} propriétés à afficher
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {selectedProperty && (() => {
+        const property = PROPERTIES.find(p => p.id === selectedProperty);
+        if (!property) return null;
+        
+        return (
+          <View style={styles.selectedCard}>
+            <Pressable style={styles.card} onPress={() => router.push(`/property/${property.id}`)}>
+              <Pressable style={styles.closeBtn} onPress={() => setSelectedProperty(null)}>
+                <X size={16} color={Colors.light.text} />
+              </Pressable>
+              <Image source={{ uri: property.images[0] }} style={styles.cardImage} />
+              <View style={styles.cardContent}>
+                <Text style={styles.cardTitle} numberOfLines={2}>{property.title}</Text>
+                <Text style={styles.cardPrice}>{formatPrice(property.price)}</Text>
+                <View style={styles.cardLocation}>
+                  <MapPin size={14} color={Colors.light.textSecondary} />
+                  <Text style={styles.cardLocationText} numberOfLines={1}>
+                    {property.neighborhoodName}, {property.cityName}
+                  </Text>
+                </View>
+                <View style={styles.cardDetails}>
+                  <View style={styles.tag}>
+                    <Text style={styles.tagText}>{property.type}</Text>
+                  </View>
+                  <Text style={styles.detailText}>{property.surfaceArea}m²</Text>
+                  {property.bedrooms && (
+                    <>
+                      <Text style={styles.dot}>•</Text>
+                      <Text style={styles.detailText}>{property.bedrooms} ch.</Text>
+                    </>
+                  )}
+                </View>
+                <Pressable style={styles.viewBtn} onPress={() => router.push(`/property/${property.id}`)}>
+                  <Text style={styles.viewBtnText}>Voir détails</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </View>
+        );
+      })()}
+    </View>
+  );
+}
+
+function MobileMapView() {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + 20 }]}>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.title}>Carte des biens</Text>
+            <Text style={styles.subtitle}>{PROPERTIES.length} biens disponibles</Text>
+          </View>
+        </View>
+      </View>
+      <View style={styles.mobileMessage}>
+        <Text style={styles.mobileMessageText}>
+          La carte interactive est disponible sur la version web.
+        </Text>
+        <Text style={styles.mobileMessageSubtext}>
+          {PROPERTIES.length} propriétés disponibles
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+export default function MapViewScreen() {
+  if (Platform.OS === 'web') {
+    return <WebMapView />;
+  }
+  return <MobileMapView />;
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.light.backgroundSecondary },
+  header: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: Colors.light.background, paddingHorizontal: 20, paddingBottom: 16, shadowColor: Colors.light.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4, zIndex: 10 },
+  headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { fontSize: 20, fontWeight: '700', color: Colors.light.text, marginBottom: 4 },
+  subtitle: { fontSize: 12, color: Colors.light.textSecondary },
+  resetButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.light.backgroundSecondary, justifyContent: 'center', alignItems: 'center' },
+  mapContainer: { flex: 1, backgroundColor: Colors.light.backgroundSecondary, minHeight: 400 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  loadingText: { fontSize: 16, fontWeight: '600', color: Colors.light.text, marginBottom: 8 },
+  loadingSubtext: { fontSize: 14, color: Colors.light.textSecondary },
+  mobileMessage: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  mobileMessageText: { fontSize: 16, fontWeight: '600', color: Colors.light.text, textAlign: 'center', marginBottom: 8 },
+  mobileMessageSubtext: { fontSize: 14, color: Colors.light.textSecondary, textAlign: 'center' },
+  selectedCard: { position: 'absolute', bottom: 100, left: 16, right: 16, alignItems: 'center' },
+  card: { width: '100%', maxWidth: 400, backgroundColor: Colors.light.background, borderRadius: 20, overflow: 'hidden', shadowColor: Colors.light.shadow, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 },
+  closeBtn: { position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.light.background, justifyContent: 'center', alignItems: 'center', zIndex: 10, shadowColor: Colors.light.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 4 },
+  cardImage: { width: '100%', height: 220 },
+  cardContent: { padding: 16 },
+  cardTitle: { fontSize: 18, fontWeight: '700', color: Colors.light.text, marginBottom: 8 },
+  cardPrice: { fontSize: 22, fontWeight: '700', color: Colors.light.primary, marginBottom: 10 },
+  cardLocation: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
+  cardLocationText: { fontSize: 14, color: Colors.light.textSecondary, flex: 1 },
+  cardDetails: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+  detailText: { fontSize: 13, color: Colors.light.textSecondary, fontWeight: '500' },
+  dot: { fontSize: 13, color: Colors.light.textSecondary },
+  tag: { paddingHorizontal: 10, paddingVertical: 4, backgroundColor: Colors.light.backgroundSecondary, borderRadius: 6 },
+  tagText: { fontSize: 11, fontWeight: '600', color: Colors.light.text },
+  viewBtn: { backgroundColor: Colors.light.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  viewBtnText: { fontSize: 16, fontWeight: '700', color: Colors.light.background },
+});
