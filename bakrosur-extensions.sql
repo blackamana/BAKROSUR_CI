@@ -13,9 +13,7 @@ ALTER TABLE properties ADD COLUMN IF NOT EXISTS title_verified BOOLEAN DEFAULT F
 ALTER TABLE properties ADD COLUMN IF NOT EXISTS title_verification_date TIMESTAMPTZ;
 ALTER TABLE properties ADD COLUMN IF NOT EXISTS sigfu_verification_id VARCHAR(255);
 
--- Assurer que available_documents est bien un tableau
--- (Peut-être déjà défini dans le schéma principal, mais on vérifie)
-ALTER TABLE properties ALTER COLUMN images TYPE TEXT[] USING CASE WHEN images IS NULL THEN '{}' ELSE images::TEXT[] END;
+-- Note: Les images sont gérées dans la table property_images (relation séparée)
 
 -- Index pour performances
 CREATE INDEX IF NOT EXISTS idx_properties_bakro_score ON properties(bakro_score DESC NULLS LAST);
